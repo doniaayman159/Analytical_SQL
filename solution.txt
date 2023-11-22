@@ -1,0 +1,83 @@
+-----Query to retrieve next and previous time he buy 
+select customer_id,   
+lag(invoice_date, 1,'No prev ') over (partition by  invoice_no order by invoice_date) as previous_time,
+LEAD(invoice_date, 1,'No Next') over (partition by  invoice_no order by invoice_date) as Next_time
+from online_retail
+ where customer_id is not null
+
+-----------------------------------
+-------Query to retrieve the country that has rank 1 in not cancelling orders 
+select * from (
+select  country,
+count(invoice_no) as canceled_Count,  Rank() over (order by count(invoice_no)  ) rnk
+from online_retail
+where invoice_no not like 'C%'
+group by country) as t
+where rnk = 1;
+-------Query to retrieve the country that has rank 1 in cancelling orders 
+
+select * from (
+select  country,
+count(invoice_no) as canceled_Count,  Rank() over (order by count(invoice_no) desc ) rnk
+from online_retail
+where invoice_no like 'C%'
+group by country) as t
+where rnk = 1;
+
+
+--------Query to retrieve avg sales in each country
+select distinct *
+from (select  stock_code,description,country ,
+Avg(quantity*unit_price) over (partition by country order by invoice_date) as Avg_salary
+from online_retail) as t 
+order by stock_code;
+
+-----------------------------------
+------Query to retrieve the first and last time customer treat with us time 
+select distinct *
+from (select customer_id, stock_code,description,country ,
+first_value(invoice_date) over (partition by invoice_no order by invoice_date) as fv, 
+last_value(invoice_date) over (partition by invoice_no order by invoice_date) as lv
+from online_retail) as t 
+order by customer_id;
+----------------------------
+
+
+Q2
+****
+
+Select 
+customer_id,recency,frequincy,monetary,r_score,fm_score,
+  case 
+   when ((r_score+fm_score)>=9) then 'Champions'
+   when (r_score =5 and fm_Score =2 ) or (r_score =4 and fm_Score =2) or (r_score =3 and fm_Score =3) or (r_score =4 and fm_Score =3) then 'Potential Loyalists'
+   when (r_score =5 and fm_Score =3 ) or (r_score =4 and fm_Score =4) or (r_score =3 and fm_Score =5) or (r_score =3 and fm_Score =4) then 'Loyal Customers'
+   when (r_score =5 and fm_Score =1 )then 'Recent Customers'
+   when (r_score =4 and fm_Score =1 ) or (r_score =3 and fm_Score =1) then 'Promising'
+   when (r_score =3 and fm_Score =2 ) or (r_score =2 and fm_Score =3) or (r_score =2 and fm_Score =2) then 'Customers Needing Attention'
+   when (r_score =2 and fm_Score =5 ) or (r_score =2 and fm_Score =4) or (r_score =1 and fm_Score =3) then 'At Risk'
+   when (r_score =1 and fm_Score =5 ) or (r_score =1 and fm_Score =4)  then 'Cant Lose Them'
+   when ((r_score + fm_Score)=3 )then 'Hibernating'
+   when ((r_score +fm_Score) <=2 ) then 'Lost' 
+  end as "cust_segment"
+from (
+with t1 as (
+ select customer_id,recency,frequincy,monetary,
+    ntile(5)over( order by recency desc)as r_score,
+    ((frequincy+monetary)/2)::numeric(10) as fm_score
+ from(
+  select 
+   distinct customer_id,
+   (select max(to_date(invoice_date,'mm/dd/yy')) from online_retail)- 
+   max(to_date(invoice_date,'mm/dd/yy'))over(partition by customer_id ) as recency,
+   count(invoice_no)over(partition by customer_id) as frequincy,
+   sum(unit_price)over(partition by customer_id)::numeric(10,2) as monetary
+  from online_retail 
+   where customer_id!=''
+  )a 
+ group by 1,2,3,4)
+select* from t1)s
+order by monetary,customer_id desc;
+
+
+
